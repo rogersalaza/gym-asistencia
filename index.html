@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Control de Asistencia Gym</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=Barlow:wght@400;500;600&display=swap">
+<style>
+html{color-scheme:light}body{margin:0}
+/* Layout: tablero de recepción — aforo arriba, check-in a la izquierda, gente dentro y horas a la derecha */
+:root{
+  --bg:#eef0f2; --panel:#ffffff; --ink:#1b2128; --muted:#5d6874; --line:#d6dbe0;
+  --accent:#d9561a; --accent-ink:#ffffff; --ok:#1f8a4c; --warn:#c98a00; --bad:#c23b2c;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,Segoe UI,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12161b; --panel:#1b2128; --ink:#e9edf1; --muted:#97a3ae; --line:#2c343d;
+  --accent:#f0743a; --accent-ink:#12161b; --ok:#4cc47f; --warn:#e3b23c; --bad:#ef6a5a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161b; --panel:#1b2128; --ink:#e9edf1; --muted:#97a3ae; --line:#2c343d;
+  --accent:#f0743a; --accent-ink:#12161b; --ok:#4cc47f; --warn:#e3b23c; --bad:#ef6a5a; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.wrap{max-width:1040px;margin:0 auto;display:grid;gap:16px}
+header{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:12px}
+h1{font-family:var(--display);font-weight:800;font-size:clamp(28px,5vw,40px);letter-spacing:.01em;margin:0;line-height:1;text-transform:uppercase;text-wrap:balance}
+.sub{color:var(--muted);margin:4px 0 0}
+.tag{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:4px 10px}
+.aforo{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:center}
+.big{font-family:var(--display);font-weight:800;font-size:64px;line-height:.9;font-variant-numeric:tabular-nums}
+.big small{font-size:24px;color:var(--muted);font-weight:600}
+.lbl{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.bar{height:14px;background:var(--line);border-radius:7px;overflow:hidden;margin:8px 0}
+.bar i{display:block;height:100%;background:var(--ok);transition:width .3s}
+.stats{display:flex;flex-wrap:wrap;gap:6px 20px;font-variant-numeric:tabular-nums}
+.stats b{font-weight:600}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;color:var(--accent-ink)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0;display:grid;gap:12px;align-content:start}
+h2{font-family:var(--display);font-weight:600;font-size:22px;margin:0;text-transform:uppercase;letter-spacing:.02em}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+input,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;min-width:0;flex:1}
+button{font:inherit;font-weight:600;border:0;border-radius:8px;padding:10px 16px;cursor:pointer;background:var(--accent);color:var(--accent-ink)}
+button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);padding:6px 10px;font-size:13px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.msg{min-height:1.4em;font-size:14px;color:var(--muted)}
+ul{list-style:none;margin:0;padding:0;display:grid}
+li{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
+li:first-child{border-top:0}
+.who{min-width:0}
+.who b{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.who span{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.empty{color:var(--muted);font-size:14px}
+.hours{display:grid;grid-template-columns:repeat(17,1fr);gap:3px;align-items:end;height:110px}
+.hours div{background:var(--line);border-radius:3px 3px 0 0;min-height:3px;position:relative}
+.hours div.peak{background:var(--accent)}
+.hlabels{display:grid;grid-template-columns:repeat(17,1fr);gap:3px;font-size:11px;color:var(--muted);text-align:center;font-variant-numeric:tabular-nums}
+.note{font-size:13px;color:var(--muted)}
+@media (max-width:720px){.grid{grid-template-columns:1fr}.aforo{grid-template-columns:1fr}.big{font-size:52px}}
+@media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Control de asistencia</h1>
+      <p class="sub">Recepción del gym · registra entradas y salidas y ve el aforo en tiempo real</p>
+    </div>
+    <span class="tag">Datos de ejemplo</span>
+  </header>
+
+  <section class="aforo" aria-label="Aforo actual">
+    <div>
+      <div class="lbl">Dentro ahora</div>
+      <div class="big"><span id="dentro">0</span><small> / <span id="cap">60</span></small></div>
+    </div>
+    <div>
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <span class="lbl">Aforo</span><span id="estado" class="pill">Libre</span>
+      </div>
+      <div class="bar"><i id="barra" style="width:0"></i></div>
+      <div class="stats">
+        <span>Visitas hoy: <b id="hoy">0</b></span>
+        <span>Hora pico: <b id="pico">—</b></span>
+        <span>Estancia promedio: <b id="prom">—</b></span>
+      </div>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Registrar entrada</h2>
+      <form id="f" class="row" autocomplete="off">
+        <input id="nombre" list="socios" placeholder="Nombre o número de socio" aria-label="Nombre o número de socio" required>
+        <datalist id="socios"></datalist>
+        <select id="tipo" aria-label="Tipo de acceso">
+          <option>Mensualidad</option><option>Visita</option><option>Clase</option>
+        </select>
+        <button type="submit">Entrar</button>
+      </form>
+      <div id="msg" class="msg" role="status"></div>
+
+      <h2>Afluencia por hora</h2>
+      <div class="hours" id="hours" aria-label="Entradas por hora de 6:00 a 22:00"></div>
+      <div class="hlabels" id="hlabels"></div>
+      <p class="note">Entradas registradas hoy, de 6:00 a 22:00. En naranja, la hora con más gente.</p>
+    </section>
+
+    <section class="card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <h2>Dentro del gym</h2>
+        <button class="ghost" id="reset" type="button">Reiniciar día</button>
+      </div>
+      <ul id="lista"></ul>
+      <div id="confirm" class="row" hidden>
+        <span class="msg" style="flex:1">¿Borrar todos los registros de hoy?</span>
+        <button class="ghost" id="no" type="button">Cancelar</button>
+        <button id="si" type="button">Borrar</button>
+      </div>
+      <h2>Salidas de hoy</h2>
+      <ul id="salidas"></ul>
+    </section>
+  </div>
+</div>
+
+<script>
+const KEY="gym-asistencia-v1", CAP=60, H0=6, H1=22;
+const SOCIOS=["Ana López","Carlos Méndez","Diana Ruiz","Eduardo Garza","Fernanda Treviño","Jorge Salinas","Karla Rdz.","Luis Villarreal","Mariana Cantú","Óscar Leal","Paola Elizondo","Ricardo Sáenz"];
+let st;
+
+function hoyISO(){return new Date().toISOString().slice(0,10)}
+function ejemplo(){
+  const d=new Date(); const at=(h,m)=>{const x=new Date(d);x.setHours(h,m,0,0);return x.getTime()};
+  const now=Date.now(); const regs=[];
+  const plan=[[6,10,7,15],[6,25,7,40],[7,5,8,10],[7,30,8,45],[12,10,13,0],[13,5,14,0],[18,0,19,20],[18,15,19,30],[18,40,null,null],[19,5,null,null],[19,10,null,null]];
+  plan.forEach((p,i)=>{const e=at(p[0],p[1]); if(e>now) return;
+    let s=p[2]!=null?at(p[2],p[3]):null; if(s&&s>now) s=null;
+    regs.push({id:i+1,n:SOCIOS[i],t:i%4===3?"Visita":"Mensualidad",e,s});});
+  if(!regs.length){regs.push({id:1,n:SOCIOS[0],t:"Mensualidad",e:now-40*60000,s:null},{id:2,n:SOCIOS[1],t:"Clase",e:now-15*60000,s:null});}
+  return {dia:hoyISO(),regs,next:regs.length+1};
+}
+function load(){try{const s=JSON.parse(localStorage.getItem(KEY)); if(s&&s.dia===hoyISO()) return s;}catch(e){} return ejemplo();}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}}
+const hm=t=>new Date(t).toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit"});
+const dur=ms=>{const m=Math.round(ms/60000);return m<60?m+" min":Math.floor(m/60)+" h "+(m%60)+" min"};
+const $=id=>document.getElementById(id);
+
+function render(){
+  const dentro=st.regs.filter(r=>!r.s), fuera=st.regs.filter(r=>r.s).sort((a,b)=>b.s-a.s);
+  $("dentro").textContent=dentro.length; $("cap").textContent=CAP; $("hoy").textContent=st.regs.length;
+  const pct=Math.min(100,dentro.length/CAP*100), b=$("barra"), e=$("estado");
+  b.style.width=pct+"%";
+  const [txt,col]=pct>=90?["Lleno","var(--bad)"]:pct>=60?["Concurrido","var(--warn)"]:["Libre","var(--ok)"];
+  b.style.background=col; e.style.background=col; e.textContent=txt;
+  const est=fuera.map(r=>r.s-r.e); $("prom").textContent=est.length?dur(est.reduce((a,c)=>a+c,0)/est.length):"—";
+
+  const counts=Array(H1-H0+1).fill(0);
+  st.regs.forEach(r=>{const h=new Date(r.e).getHours(); if(h>=H0&&h<=H1) counts[h-H0]++;});
+  const max=Math.max(...counts); const pi=max?counts.indexOf(max):-1;
+  $("pico").textContent=pi<0?"—":(H0+pi)+":00 ("+max+")";
+  $("hours").innerHTML=counts.map((c,i)=>`<div class="${i===pi?'peak':''}" style="height:${max?Math.max(3,c/max*100):3}%" title="${H0+i}:00 · ${c} entradas"></div>`).join("");
+  $("hlabels").innerHTML=counts.map((c,i)=>`<span>${(H0+i)%3===0?H0+i:""}</span>`).join("");
+
+  $("lista").innerHTML=dentro.length?dentro.sort((a,b)=>b.e-a.e).map(r=>`<li><div class="who"><b>${esc(r.n)}</b><span>${r.t} · entró ${hm(r.e)} · ${dur(Date.now()-r.e)}</span></div><button class="ghost" data-out="${r.id}" type="button">Salida</button></li>`).join(""):`<li class="empty">No hay nadie dentro.</li>`;
+  $("salidas").innerHTML=fuera.length?fuera.slice(0,8).map(r=>`<li><div class="who"><b>${esc(r.n)}</b><span>${hm(r.e)} – ${hm(r.s)} · ${dur(r.s-r.e)}</span></div></li>`).join(""):`<li class="empty">Aún no hay salidas.</li>`;
+  $("socios").innerHTML=SOCIOS.map(s=>`<option value="${esc(s)}">`).join("");
+}
+function esc(s){return s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+
+$("f").addEventListener("submit",ev=>{ev.preventDefault();
+  const n=$("nombre").value.trim(); if(!n) return;
+  if(st.regs.some(r=>!r.s&&r.n.toLowerCase()===n.toLowerCase())){$("msg").textContent=n+" ya está dentro. Registra su salida primero.";return;}
+  if(st.regs.filter(r=>!r.s).length>=CAP){$("msg").textContent="Aforo completo: espera a que alguien salga.";return;}
+  st.regs.push({id:st.next++,n,t:$("tipo").value,e:Date.now(),s:null}); save(); render();
+  $("msg").textContent="Entrada registrada: "+n+" a las "+hm(Date.now())+"."; $("nombre").value=""; $("nombre").focus();
+});
+document.addEventListener("click",ev=>{const id=ev.target.dataset&&ev.target.dataset.out; if(!id) return;
+  const r=st.regs.find(x=>x.id==id); if(r){r.s=Date.now(); save(); render(); $("msg").textContent="Salida registrada: "+r.n+".";}});
+$("reset").onclick=()=>{$("confirm").hidden=false};
+$("no").onclick=()=>{$("confirm").hidden=true};
+$("si").onclick=()=>{st={dia:hoyISO(),regs:[],next:1}; save(); $("confirm").hidden=true; render(); $("msg").textContent="Día reiniciado.";};
+
+st=load(); render(); setInterval(render,60000);
+</script>
+
+</body>
+</html>
